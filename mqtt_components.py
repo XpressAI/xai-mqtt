@@ -1,6 +1,5 @@
 from xai_components.base import InArg, OutArg, InCompArg, Component, BaseComponent, xai_component
 from paho.mqtt import client as mqtt_client
-import os
 
 
 @xai_component
@@ -77,7 +76,7 @@ class MQTTStartLoop(Component):
 
         try:
             client.loop_forever()
-        except e:
+        except Exception as e:
             print(e)
 
 
@@ -91,6 +90,6 @@ class MQTTDisconnect(Component):
 
         try:
             client.loop_stop()
-        except e:
+        except Exception as e:
             print(e)
 
