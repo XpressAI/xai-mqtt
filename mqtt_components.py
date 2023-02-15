@@ -64,9 +64,8 @@ class MQTTSubscribe(Component):
         self.message.value = message.payload.decode()
         ctx['mqtt_message'] = message
         ctx['mqtt_userdata'] = userdata
-        is_done, next_body = self.on_message.do(ctx)
-        while next_body:
-            is_done, next_body = next_body.do(ctx)
+        self.on_message.do(ctx)
+
 
 @xai_component
 class MQTTStartLoop(Component):
