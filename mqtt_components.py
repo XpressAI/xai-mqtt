@@ -10,14 +10,6 @@ class MQTTConnect(Component):
     username: InArg[str]
     password: InArg[str]
 
-    def __init__(self):
-        self.done = False
-        self.broker = InArg.empty()
-        self.port = InArg.empty()
-        self.client_id = InArg.empty()
-        self.username = InArg.empty()
-        self.password = InArg.empty()
-
     def execute(self, ctx) -> None:
         client = mqtt_client.Client(self.client_id.value)
         if self.username.value is not None:
@@ -31,12 +23,6 @@ class MQTTPublish(Component):
     message: InArg[str]
     result: OutArg[int]
 
-    def __init__(self):
-        self.done = False
-        self.topic = InArg.empty()
-        self.message = InArg.empty()
-        self.result = OutArg.empty()
-
     def execute(self, ctx) -> None:
         client = ctx['mqtt_client']
         result = client.publish(self.topic.value, self.message.value)
@@ -48,11 +34,6 @@ class MQTTSubscribe(Component):
     on_message: BaseComponent
     topic: InArg[str]
     message: OutArg[str]
-
-    def __init__(self):
-        self.done = False
-        self.topic = InArg.empty()
-        self.message = OutArg.empty()
 
     def execute(self, ctx) -> None:
         client = ctx['mqtt_client']
@@ -68,8 +49,6 @@ class MQTTSubscribe(Component):
 
 @xai_component
 class MQTTStartLoop(Component):
-    def __init__(self):
-        self.done = False
 
     def execute(self, ctx) -> None:
         client = ctx['mqtt_client']
@@ -82,9 +61,7 @@ class MQTTStartLoop(Component):
 
 @xai_component
 class MQTTDisconnect(Component):
-    def __init__(self):
-        self.done = False
-
+    
     def execute(self, ctx) -> None:
         client = ctx['mqtt_client']
 
