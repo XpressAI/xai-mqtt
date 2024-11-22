@@ -34,49 +34,32 @@ jobs:
         source venv/bin/activate
         pip install --upgrade pip
 
-    - name: Install xircuits in virtual environment
-      run: pip install xircuits
-
-    - name: Set Environment Variables
+    - name: Install dependencies
       run: |
-        LIBRARY_NAME=$(echo "${GITHUB_REPOSITORY##*/}" | sed 's/-/_/g')
-        echo "LIBRARY_NAME=$LIBRARY_NAME" >> $GITHUB_ENV
-        COMPONENT_LIBRARY_PATH="xai_components/${LIBRARY_NAME}"
-        echo "COMPONENT_LIBRARY_PATH=$COMPONENT_LIBRARY_PATH" >> $GITHUB_ENV
-        if [ "${{ github.event_name }}" == "pull_request" ]; then
-          echo "BRANCH_NAME=${{ github.head_ref }}" >> $GITHUB_ENV
-        else
-          echo "BRANCH_NAME=${GITHUB_REF#refs/heads/}" >> $GITHUB_ENV
-        fi
+        pip install xircuits
+        pip install paho-mqtt==1.6.1
 
-    - name: List Xircuits
-      run: xircuits list
-
-    - name: Clone Repository
+    - name: Install mosquitto MQTT
       run: |
-        rm -rf ${{ env.COMPONENT_LIBRARY_PATH }}
-        if [ "${{ github.event_name }}" == "pull_request" ]; then
-          REPO_URL="${{ github.event.pull_request.head.repo.clone_url }}"
-        else
-          REPO_URL="https://github.com/${{ github.repository }}"
-        fi
-        git clone -b ${{ env.BRANCH_NAME }} $REPO_URL ${{ env.COMPONENT_LIBRARY_PATH }}
+        sudo apt-get update
+        sudo apt-get install -y mosquitto=2.0.11 mosquitto-clients=2.0.11
+        sudo systemctl enable mosquitto
+        sudo systemctl start mosquitto
 
-    - name: Install Component Library
+    - name: Configure Mosquitto
       run: |
-        if [ -f "${{ env.COMPONENT_LIBRARY_PATH }}/requirements.txt" ]; then
-          echo "requirements.txt found, installing dependencies..."
-          pip install -r ${{ env.COMPONENT_LIBRARY_PATH }}/requirements.txt
-        else
-          echo "requirements.txt not found."
-        fi
+        echo "listener 1883 127.0.0.1" | sudo tee /etc/mosquitto/conf.d/default.conf
+        sudo systemctl restart mosquitto
 
-    - name: Install Mosquitto MQTT
+    - name: Verify Mosquitto Service
       run: |
-          sudo apt-get update
-          sudo apt-get install -y mosquitto mosquitto-clients
-          sudo systemctl enable mosquitto
-          sudo systemctl start mosquitto
+        sudo systemctl status mosquitto
+        netstat -tuln | grep 1883
+
+    - name: Test Mosquitto
+      run: |
+        mosquitto_pub -h localhost -p 1883 -t "test/topic" -m "Hello"
+        mosquitto_sub -h localhost -p 1883 -t "test/topic" -C 1
 
     - name: Test .xircuits Workflows
       run: |
@@ -95,24 +78,24 @@ jobs:
         PYTHON_PID=$!
         
         # Wait for Python script to start (adjust as needed)
-        echo "Waiting 10 seconds for the Python script to initialize..." >> $LOG_FILE
-        sleep 10
+        echo "Waiting 15 seconds for the Python script to initialize..." >> $LOG_FILE
+        sleep 15
 
         # Run MQTT subscriber in the background to listen for "testing_reply" topic
         echo "Starting MQTT subscriber to listen for 'testing_reply' topic..." >> $LOG_FILE
         mosquitto_sub -h localhost -p 1883 -t "testing_reply" -C 1 > output.txt 2>> $LOG_FILE &
         SUB_PID=$!
 
-        # Publish the MQTT message "trigger" to "my/topic"
-        echo "Publishing MQTT message 'trigger' to topic 'my/topic'..." >> $LOG_FILE
-        mosquitto_pub -h localhost -p 1883 -t "my/topic" -m "trigger" 2>> $LOG_FILE
-        sleep 5
+        # Publish the MQTT message "trigger!!!" to "my/topic"
+        echo "Publishing MQTT message 'trigger!!!' to topic 'my/topic'..." >> $LOG_FILE
+        mosquitto_pub -h localhost -p 1883 -t "my/topic" -m "trigger!!!" 2>> $LOG_FILE
+        sleep 10
 
         # Wait for the subscriber to receive the message
         echo "Waiting for MQTT subscriber to receive message..." >> $LOG_FILE
         wait $SUB_PID
 
-        # Check if the message "trigger!!!" was received
+        # Check if the message matches "trigger!!!"
         if grep -q "trigger!!!" output.txt; then
           echo "MQTT test successful: 'trigger!!!' received." | tee -a $LOG_FILE
         else
@@ -134,11 +117,12 @@ jobs:
         fi
 
         echo "MQTT and Python script test completed." >> $LOG_FILE
-        fi
 
-    - name: Upload log file
+    - name: Upload log files
       if: always()
       uses: actions/upload-artifact@v4
       with:
-        name: ${{ env.LIBRARY_NAME }}-validation-workflow-${{ matrix.python-version }}
-        path: ${{ github.workspace }}/workflow_logs.txt
+        name: mqtt-logs
+        path: |
+          ${{ github.workspace }}/workflow_logs.txt
+          ${{ github.workspace }}/output.txt
