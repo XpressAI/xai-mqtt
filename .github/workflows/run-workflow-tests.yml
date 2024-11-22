@@ -1,0 +1,144 @@
+name: Run Xircuits Workflows Test
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: "*"
+  workflow_dispatch:
+
+jobs:
+  build-and-run:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.9", "3.10", "3.11"]
+    env:
+      TEST_XIRCUITS: |
+        examples/mqtt_sample.xircuits
+
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v3
+
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ matrix.python-version }}
+
+    - name: Create virtual environment
+      run: |
+        python -m venv venv
+        echo "${{ github.workspace }}/venv/bin" >> $GITHUB_PATH
+        source venv/bin/activate
+        pip install --upgrade pip
+
+    - name: Install xircuits in virtual environment
+      run: pip install xircuits
+
+    - name: Set Environment Variables
+      run: |
+        LIBRARY_NAME=$(echo "${GITHUB_REPOSITORY##*/}" | sed 's/-/_/g')
+        echo "LIBRARY_NAME=$LIBRARY_NAME" >> $GITHUB_ENV
+        COMPONENT_LIBRARY_PATH="xai_components/${LIBRARY_NAME}"
+        echo "COMPONENT_LIBRARY_PATH=$COMPONENT_LIBRARY_PATH" >> $GITHUB_ENV
+        if [ "${{ github.event_name }}" == "pull_request" ]; then
+          echo "BRANCH_NAME=${{ github.head_ref }}" >> $GITHUB_ENV
+        else
+          echo "BRANCH_NAME=${GITHUB_REF#refs/heads/}" >> $GITHUB_ENV
+        fi
+
+    - name: List Xircuits
+      run: xircuits list
+
+    - name: Clone Repository
+      run: |
+        rm -rf ${{ env.COMPONENT_LIBRARY_PATH }}
+        if [ "${{ github.event_name }}" == "pull_request" ]; then
+          REPO_URL="${{ github.event.pull_request.head.repo.clone_url }}"
+        else
+          REPO_URL="https://github.com/${{ github.repository }}"
+        fi
+        git clone -b ${{ env.BRANCH_NAME }} $REPO_URL ${{ env.COMPONENT_LIBRARY_PATH }}
+
+    - name: Install Component Library
+      run: |
+        if [ -f "${{ env.COMPONENT_LIBRARY_PATH }}/requirements.txt" ]; then
+          echo "requirements.txt found, installing dependencies..."
+          pip install -r ${{ env.COMPONENT_LIBRARY_PATH }}/requirements.txt
+        else
+          echo "requirements.txt not found."
+        fi
+
+    - name: Install Mosquitto MQTT
+      run: |
+          sudo apt-get update
+          sudo apt-get install -y mosquitto mosquitto-clients
+          sudo systemctl enable mosquitto
+          sudo systemctl start mosquitto
+
+    - name: Test .xircuits Workflows
+      run: |
+        LOG_FILE="${GITHUB_WORKSPACE}/workflow_logs.txt"
+        echo "Starting MQTT and Python script test..." > $LOG_FILE
+                
+        # Run xircuits compile command and log output
+        FULL_PATH="${COMPONENT_LIBRARY_PATH}/${TEST_XIRCUITS}"
+        echo "Compiling Xircuits workflow: ${FULL_PATH}" >> $LOG_FILE
+        xircuits compile $FULL_PATH "${FULL_PATH%.*}.py" 2>&1 | tee -a $LOG_FILE
+        
+        # Run the Python script in the background
+        export PYTHONPATH="${GITHUB_WORKSPACE}:${PYTHONPATH}"
+        echo "Running Python script: ${FULL_PATH%.*}.py" >> $LOG_FILE
+        python "${FULL_PATH%.*}.py" 2>&1 | tee -a $LOG_FILE &
+        PYTHON_PID=$!
+        
+        # Wait for Python script to start (adjust as needed)
+        echo "Waiting 10 seconds for the Python script to initialize..." >> $LOG_FILE
+        sleep 10
+
+        # Run MQTT subscriber in the background to listen for "testing_reply" topic
+        echo "Starting MQTT subscriber to listen for 'testing_reply' topic..." >> $LOG_FILE
+        mosquitto_sub -h localhost -p 1883 -t "testing_reply" -C 1 > output.txt 2>> $LOG_FILE &
+        SUB_PID=$!
+
+        # Publish the MQTT message "trigger" to "my/topic"
+        echo "Publishing MQTT message 'trigger' to topic 'my/topic'..." >> $LOG_FILE
+        mosquitto_pub -h localhost -p 1883 -t "my/topic" -m "trigger" 2>> $LOG_FILE
+        sleep 5
+
+        # Wait for the subscriber to receive the message
+        echo "Waiting for MQTT subscriber to receive message..." >> $LOG_FILE
+        wait $SUB_PID
+
+        # Check if the message "trigger!!!" was received
+        if grep -q "trigger!!!" output.txt; then
+          echo "MQTT test successful: 'trigger!!!' received." | tee -a $LOG_FILE
+        else
+          echo "MQTT test failed: 'trigger!!!' not received." | tee -a $LOG_FILE
+          # Kill the Python process in case of failure
+          if ps -p $PYTHON_PID > /dev/null; then
+            echo "Killing Python script process (PID: $PYTHON_PID)..." >> $LOG_FILE
+            kill -9 $PYTHON_PID
+          fi
+          exit 1
+        fi
+
+        # Check if the Python script is still running, and if so, kill it
+        if ps -p $PYTHON_PID > /dev/null; then
+          echo "Python script ran successfully for the duration of the test. Killing the process..." | tee -a $LOG_FILE
+          kill -9 $PYTHON_PID
+        else
+          echo "Python script finished execution before the test completed." | tee -a $LOG_FILE
+        fi
+
+        echo "MQTT and Python script test completed." >> $LOG_FILE
+        fi
+
+    - name: Upload log file
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ env.LIBRARY_NAME }}-validation-workflow-${{ matrix.python-version }}
+        path: ${{ github.workspace }}/workflow_logs.txt

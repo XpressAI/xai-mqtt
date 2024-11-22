@@ -1,0 +1,18 @@
+[project]
+name = "xai-mqtt"
+version = "0.1.0"
+description = "Xircuits component library for mqtt"
+authors = [{ name = "XpressAI", email = "eduardo@xpress.ai" }]
+license = "Apache-2.0"
+readme = "README.md"
+repository = "https://github.com/XpressAI/xai-mqtt"
+keywords = ["xircuits", "mqtt"]
+
+dependencies = [
+    "paho-mqtt==1.6.1"
+]
+
+# Xircuits-specific configurations
+[tool.xircuits]
+default_example_path = "examples/mqtt_sample.xircuits"
+requirements_path = "requirements.txt"
