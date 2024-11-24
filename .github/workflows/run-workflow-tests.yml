@@ -14,6 +14,7 @@ jobs:
       fail-fast: false
       matrix:
         python-version: ["3.9", "3.10", "3.11"]
+    
     env:
       TEST_XIRCUITS: |
         examples/mqtt_sample.xircuits
@@ -29,44 +30,65 @@ jobs:
 
     - name: Create virtual environment
       run: |
-        python -m venv venv
-        echo "${{ github.workspace }}/venv/bin" >> $GITHUB_PATH
-        source venv/bin/activate
-        pip install --upgrade pip
-
-    - name: Install dependencies
+          python -m venv venv
+          echo "${{ github.workspace }}/venv/bin" >> $GITHUB_PATH
+          source venv/bin/activate
+          pip install --upgrade pip
+    - name: Install xircuits in virtual environment
+      run: pip install xircuits
+  
+    - name: Set Environment Variables
       run: |
-        pip install xircuits
-        pip install paho-mqtt==1.6.1
-
-    - name: Install mosquitto MQTT
+          LIBRARY_NAME=$(echo "${GITHUB_REPOSITORY##*/}" | sed 's/-/_/g')
+          echo "LIBRARY_NAME=$LIBRARY_NAME" >> $GITHUB_ENV
+          COMPONENT_LIBRARY_PATH="xai_components/${LIBRARY_NAME}"
+          echo "COMPONENT_LIBRARY_PATH=$COMPONENT_LIBRARY_PATH" >> $GITHUB_ENV
+          if [ "${{ github.event_name }}" == "pull_request" ]; then
+            echo "BRANCH_NAME=${{ github.head_ref }}" >> $GITHUB_ENV
+          else
+            echo "BRANCH_NAME=${GITHUB_REF#refs/heads/}" >> $GITHUB_ENV
+          fi
+    - name: List Xircuits
+      run: xircuits list
+  
+    - name: Clone Repository
       run: |
+          rm -rf ${{ env.COMPONENT_LIBRARY_PATH }}
+          if [ "${{ github.event_name }}" == "pull_request" ]; then
+            REPO_URL="${{ github.event.pull_request.head.repo.clone_url }}"
+          else
+            REPO_URL="https://github.com/${{ github.repository }}"
+          fi
+          git clone -b ${{ env.BRANCH_NAME }} $REPO_URL ${{ env.COMPONENT_LIBRARY_PATH }}
+    - name: Install Component Library
+      run: |
+          if [ -f "${{ env.COMPONENT_LIBRARY_PATH }}/requirements.txt" ]; then
+            echo "requirements.txt found, installing dependencies..."
+            pip install -r ${{ env.COMPONENT_LIBRARY_PATH }}/requirements.txt
+          else
+            echo "requirements.txt not found."
+          fi
+
+    - name: Install Mosquitto MQTT
+      run: |
+        sudo apt-get clean
         sudo apt-get update
-        sudo apt-get install -y mosquitto=2.0.11 mosquitto-clients=2.0.11
-        sudo systemctl enable mosquitto
-        sudo systemctl start mosquitto
+        sudo apt-get install -y mosquitto mosquitto-clients
+        echo "allow_anonymous true" | sudo tee /etc/mosquitto/conf.d/default.conf
+        echo "listener 1883 127.0.0.1" | sudo tee -a /etc/mosquitto/conf.d/default.conf
+        echo "persistence true" | sudo tee -a /etc/mosquitto/conf.d/default.conf
+        echo "persistent_client_expiration 1h" | sudo tee -a /etc/mosquitto/conf.d/default.conf
+        mosquitto -c /etc/mosquitto/mosquitto.conf -d
 
-    - name: Configure Mosquitto
-      run: |
-        echo "listener 1883 127.0.0.1" | sudo tee /etc/mosquitto/conf.d/default.conf
-        sudo systemctl restart mosquitto
-
-    - name: Verify Mosquitto Service
-      run: |
-        sudo systemctl status mosquitto
-        netstat -tuln | grep 1883
-
-    - name: Test Mosquitto
-      run: |
-        mosquitto_pub -h localhost -p 1883 -t "test/topic" -m "Hello"
-        mosquitto_sub -h localhost -p 1883 -t "test/topic" -C 1
+    - name: Wait for Mosquitto to Initialize
+      run: sleep 10
 
     - name: Test .xircuits Workflows
       run: |
         LOG_FILE="${GITHUB_WORKSPACE}/workflow_logs.txt"
         echo "Starting MQTT and Python script test..." > $LOG_FILE
                 
-        # Run xircuits compile command and log output
+        # Compile Xircuits workflow
         FULL_PATH="${COMPONENT_LIBRARY_PATH}/${TEST_XIRCUITS}"
         echo "Compiling Xircuits workflow: ${FULL_PATH}" >> $LOG_FILE
         xircuits compile $FULL_PATH "${FULL_PATH%.*}.py" 2>&1 | tee -a $LOG_FILE
@@ -77,18 +99,18 @@ jobs:
         python "${FULL_PATH%.*}.py" 2>&1 | tee -a $LOG_FILE &
         PYTHON_PID=$!
         
-        # Wait for Python script to start (adjust as needed)
+        # Wait for the Python script to initialize
         echo "Waiting 15 seconds for the Python script to initialize..." >> $LOG_FILE
         sleep 15
 
-        # Run MQTT subscriber in the background to listen for "testing_reply" topic
+        # Run MQTT subscriber in the background
         echo "Starting MQTT subscriber to listen for 'testing_reply' topic..." >> $LOG_FILE
         mosquitto_sub -h localhost -p 1883 -t "testing_reply" -C 1 > output.txt 2>> $LOG_FILE &
         SUB_PID=$!
 
-        # Publish the MQTT message "trigger!!!" to "my/topic"
-        echo "Publishing MQTT message 'trigger!!!' to topic 'my/topic'..." >> $LOG_FILE
-        mosquitto_pub -h localhost -p 1883 -t "my/topic" -m "trigger!!!" 2>> $LOG_FILE
+        # Publish the MQTT message
+        echo "Publishing MQTT message 'trigger' to topic 'testing'..." >> $LOG_FILE
+        mosquitto_pub -h localhost -p 1883 -t "testing" -m "trigger" 2>> $LOG_FILE
         sleep 10
 
         # Wait for the subscriber to receive the message
@@ -100,7 +122,6 @@ jobs:
           echo "MQTT test successful: 'trigger!!!' received." | tee -a $LOG_FILE
         else
           echo "MQTT test failed: 'trigger!!!' not received." | tee -a $LOG_FILE
-          # Kill the Python process in case of failure
           if ps -p $PYTHON_PID > /dev/null; then
             echo "Killing Python script process (PID: $PYTHON_PID)..." >> $LOG_FILE
             kill -9 $PYTHON_PID
@@ -118,11 +139,9 @@ jobs:
 
         echo "MQTT and Python script test completed." >> $LOG_FILE
 
-    - name: Upload log files
+    - name: Upload log file
       if: always()
       uses: actions/upload-artifact@v4
       with:
-        name: mqtt-logs
-        path: |
-          ${{ github.workspace }}/workflow_logs.txt
-          ${{ github.workspace }}/output.txt
+          name: ${{ env.LIBRARY_NAME }}-validation-workflow-${{ matrix.python-version }}
+          path: ${{ github.workspace }}/workflow_logs.txt
