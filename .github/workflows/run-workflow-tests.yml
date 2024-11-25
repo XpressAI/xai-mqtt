@@ -73,10 +73,17 @@ jobs:
 
     - name: Install Mosquitto MQTT
       run: |
-          sudo apt-get update
-          sudo apt-get install -y mosquitto mosquitto-clients
-          sudo systemctl enable mosquitto
-          sudo systemctl start mosquitto
+        sudo apt-get clean
+        sudo apt-get update
+        sudo apt-get install -y mosquitto mosquitto-clients
+        echo "allow_anonymous true" | sudo tee /etc/mosquitto/conf.d/default.conf
+        echo "listener 1883 127.0.0.1" | sudo tee -a /etc/mosquitto/conf.d/default.conf
+        echo "persistence true" | sudo tee -a /etc/mosquitto/conf.d/default.conf
+        echo "persistent_client_expiration 1h" | sudo tee -a /etc/mosquitto/conf.d/default.conf
+        mosquitto -c /etc/mosquitto/mosquitto.conf -d
+
+    - name: Wait for Mosquitto to Initialize
+      run: sleep 10
 
     - name: Test .xircuits Workflows
       run: |
@@ -95,8 +102,8 @@ jobs:
         PYTHON_PID=$!
         
         # Wait for Python script to start (adjust as needed)
-        echo "Waiting 10 seconds for the Python script to initialize..." >> $LOG_FILE
-        sleep 10
+        echo "Waiting 15 seconds for the Python script to initialize..." >> $LOG_FILE
+        sleep 15
 
         # Run MQTT subscriber in the background to listen for "testing_reply" topic
         echo "Starting MQTT subscriber to listen for 'testing_reply' topic..." >> $LOG_FILE
@@ -104,9 +111,9 @@ jobs:
         SUB_PID=$!
 
         # Publish the MQTT message "trigger" to "my/topic"
-        echo "Publishing MQTT message 'trigger' to topic 'my/topic'..." >> $LOG_FILE
-        mosquitto_pub -h localhost -p 1883 -t "my/topic" -m "trigger" 2>> $LOG_FILE
-        sleep 5
+        echo "Publishing MQTT message 'trigger' to topic 'testing'..." >> $LOG_FILE
+        mosquitto_pub -h localhost -p 1883 -t "testing" -m "trigger" 2>> $LOG_FILE
+        sleep 10
 
         # Wait for the subscriber to receive the message
         echo "Waiting for MQTT subscriber to receive message..." >> $LOG_FILE
@@ -117,7 +124,6 @@ jobs:
           echo "MQTT test successful: 'trigger!!!' received." | tee -a $LOG_FILE
         else
           echo "MQTT test failed: 'trigger!!!' not received." | tee -a $LOG_FILE
-          # Kill the Python process in case of failure
           if ps -p $PYTHON_PID > /dev/null; then
             echo "Killing Python script process (PID: $PYTHON_PID)..." >> $LOG_FILE
             kill -9 $PYTHON_PID
@@ -134,7 +140,7 @@ jobs:
         fi
 
         echo "MQTT and Python script test completed." >> $LOG_FILE
-        fi
+
 
     - name: Upload log file
       if: always()
