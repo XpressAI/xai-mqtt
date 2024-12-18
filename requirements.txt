@@ -1,1 +1,2 @@
+packaging==24.2
 paho-mqtt==1.6.1
