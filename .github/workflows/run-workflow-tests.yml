@@ -81,18 +81,7 @@ jobs:
         mosquitto -c /etc/mosquitto/mosquitto.conf -d
 
     - name: Wait for Mosquitto to Initialize
-      run: sleep 10
-        sudo apt-get clean
-        sudo apt-get update
-        sudo apt-get install -y mosquitto mosquitto-clients
-        echo "allow_anonymous true" | sudo tee /etc/mosquitto/conf.d/default.conf
-        echo "listener 1883 127.0.0.1" | sudo tee -a /etc/mosquitto/conf.d/default.conf
-        echo "persistence true" | sudo tee -a /etc/mosquitto/conf.d/default.conf
-        echo "persistent_client_expiration 1h" | sudo tee -a /etc/mosquitto/conf.d/default.conf
-        mosquitto -c /etc/mosquitto/mosquitto.conf -d
-
-    - name: Wait for Mosquitto to Initialize
-      run: sleep 10
+      run: sleep 15
 
     - name: Test .xircuits Workflows
       run: |
