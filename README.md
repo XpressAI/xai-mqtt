@@ -1,4 +1,3 @@
-
 <p align="center">
   <a href="https://github.com/XpressAI/xircuits/tree/master/xai_components#xircuits-component-library-list">Component Libraries</a> •
   <a href="https://github.com/XpressAI/xircuits/tree/master/project-templates#xircuits-project-templates-list">Project Templates</a>
@@ -14,34 +13,63 @@
 
 
 
+
+
 <p align="center"><i>Xircuits Component Library for MQTT. Easily connect, subscribe, and publish using MQTT in Xircuits workflows.</i></p>
 
-Welcome to the xai-mqtt component library! This library provides the necessary components to work with MQTT in your Xircuits workflows. You can easily connect to an MQTT broker, subscribe to topics, and publish messages within your Xircuits pipelines.
+---
+## Xircuits Component Library for MQTT
+
+This library provides the necessary components to work with MQTT in your Xircuits workflows. You can easily connect to an MQTT broker, subscribe to topics, and publish messages within your Xircuits pipelines.
 
 ## Table of Contents
 
-- [Table of Contents](#table-of-contents)
+- [Preview](#preview)
 - [Prerequisites](#prerequisites)
-- [Installing an MQTT Broker](#installing-an-mqtt-broker)
-  
-  - [Installing Mosquitto on Ubuntu/Debian](#installing-mosquitto-on-ubuntu-debian)
-  - [Installing Mosquitto on Windows](#installing-mosquitto-on-windows)
-  - [Installing Mosquitto on macOS](#installing-mosquitto-on-macos)
+- [Main Xircuits Components](#main-xircuits-components)
+- [Try the Examples](#try-the-examples)
 - [Installation](#installation)
-- [Getting Started with Xai-MQTT](#getting-started-with-xai-mqtt)
-- [Running the Example Workflow](#running-the-example-workflow)
-- [Testing Mosquitto](#testing-mosquitto)
-- [MQTT Workflow](#mqtt-workflow)
-  - [Subscribing to Topics](#subscribing-to-topics)
-  - [Publishing Messages](#publishing-messages)
+
+## Preview
+
+### The Example:
+
+<img src="https://github.com/user-attachments/assets/a2ad3d5b-61d4-4e98-98bc-491e373e4b4d" alt="mqtt_sample" />
+
+### The Result:
+
+<img src="https://github.com/user-attachments/assets/12a9273c-5b47-4e05-8f41-3a407429a828" alt="mqtt_sample_result_1"  />
+
+<img src="https://github.com/user-attachments/assets/43a4f52f-fcb7-4da5-bbeb-dead4862ea37" alt="mqtt_sample_result_2"  />
 
 ## Prerequisites
 
-Before you begin, ensure you have the following:
+Before you begin, you will need the following:
 
-1. Python 3.9+.
+1. Python3.9+.
 2. Xircuits.
+3. MQTT Broker
 
+## Main Xircuits Components
+
+### MQTTConnect Component:
+Establishes a connection to an MQTT broker using the provided credentials and stores the client instance in the context.
+
+<img src="https://github.com/user-attachments/assets/0975ac37-73b4-4dda-9a34-011775242940" alt="MQTTConnect" width="150" height="150" />
+
+### MQTTPublish Component:
+Publishes a message to a specified topic on the MQTT broker and returns the result status.
+
+<img src="https://github.com/user-attachments/assets/1b1054df-02a8-41bc-8d7e-516df352dcb2" alt="MQTTPublish" width="150" height="75" />
+
+### MQTTSubscribe Component:
+Subscribes to a specified topic and triggers an action when a message is received.
+
+### MQTTStartLoop Component:
+Starts the MQTT client loop to handle incoming messages and maintain the connection.
+
+### MQTTDisconnect Component:
+Stops the MQTT client loop and disconnects from the MQTT broker.
 
 ## Installing an MQTT Broker
 To use the xai-mqtt library, you'll need to have an MQTT broker installed on your device. One popular option is **Mosquitto**, an open-source message broker that implements the MQTT protocol.
@@ -166,18 +194,3 @@ After running the example workflow, you can manually test Mosquitto using the fo
 
 These components allow you to fully integrate MQTT messaging within your Xircuits workflows, providing an easy way to connect, subscribe, and publish to MQTT topics.
 
-## Contributing
-
-We welcome contributions to the **Mqtt XAI Components Library**! If you would like to contribute:
-
-1. Fork the repository.
-2. Create a new branch for your feature or bug fix.
-3. Open a pull request with a detailed description of your changes.
-
-Please feel free to suggest new components, improvements, or optimizations. If you encounter any issues or have ideas for enhancements, you can open an issue in the repository.
-
----
-
-### License
-
-This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for more information.
